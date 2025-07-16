@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <title>Spesifikasi Gelanggang dan Padang</title>
+  <style>
+    body { font-family: Arial; padding: 20px; max-width: 900px; margin: auto; }
+    label { display: block; margin-top: 15px; font-weight: bold; }
+    select { width: 100%; max-width: 300px; padding: 5px; }
+    #output { margin-top: 20px; }
+    .hidden { display: none; }
+    table { border-collapse: collapse; margin-top: 10px; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f0f0f0; }
+  </style>
+</head>
+<body>
+
+<h2>Spesifikasi Gelanggang & Padang</h2>
+
+<label for="sportSelect">Pilih Jenis Sukan:</label>
+<select id="sportSelect" onchange="updateVenueOptions()">
+  <option value="">-- Sila Pilih --</option>
+</select>
+
+<label for="venueSelect" class="hidden" id="venueLabel">Pilih Lokasi / Tahap:</label>
+<select id="venueSelect" class="hidden" onchange="displaySpecs()">
+  <option value="">-- Sila Pilih --</option>
+</select>
+
+<div id="output"></div>
+
+<script>
+let data = {};
+const sportSelect = document.getElementById('sportSelect');
+const venueSelect = document.getElementById('venueSelect');
+const venueLabel = document.getElementById('venueLabel');
+const outputDiv = document.getElementById('output');
+
+// Muatkan data dari fail JSON
+fetch('data-sukan.json')
+  .then(response => response.json())
+  .then(json => {
+    data = json;
+    populateSportOptions();
+  })
+  .catch(error => {
+    console.error('Ralat memuatkan data:', error);
+    outputDiv.innerHTML = '<p style="color:red;">Gagal memuatkan data sukan.</p>';
+  });
+
+function populateSportOptions() {
+  for (let sport in data) {
+    const option = document.createElement('option');
+    option.value = sport;
+    option.textContent = sport;
+    sportSelect.appendChild(option);
+  }
+}
+
+function updateVenueOptions() {
+  const selectedSport = sportSelect.value;
+  venueSelect.innerHTML = '<option value="">-- Sila Pilih --</option>';
+  outputDiv.innerHTML = '';
+
+  if (!selectedSport) {
+    venueSelect.classList.add('hidden');
+    venueLabel.classList.add('hidden');
+    return;
+  }
+
+  const venues = Object.keys(data[selectedSport]);
+  venues.forEach(venue => {
+    const option = document.createElement('option');
+    option.value = venue;
+    option.textContent = venue;
+    venueSelect.appendChild(option);
+  });
+
+  venueSelect.classList.remove('hidden');
+  venueLabel.classList.remove('hidden');
+}
+
+function displaySpecs() {
+  const sport = sportSelect.value;
+  const venue = venueSelect.value;
+
+  if (!sport || !venue) return;
+
+  const spec = data[sport][venue];
+  let html = '';
+
+  if (
+    (!spec.saiz || spec.saiz === 'N/A') &&
+    (!spec.permukaan || spec.permukaan === 'N/A') &&
+    (!spec.cahaya || spec.cahaya === 'N/A')
+  ) {
+    html = '<p>Tiada spesifikasi tersedia untuk pilihan ini.</p>';
+  } else {
+    html = '<h3>Spesifikasi</h3><table>';
+    if (spec.saiz && spec.saiz !== 'N/A') html += `<tr><td>Saiz</td><td>${spec.saiz}</td></tr>`;
+    if (spec.permukaan && spec.permukaan !== 'N/A') html += `<tr><td>Jenis Permukaan</td><td>${spec.permukaan}</td></tr>`;
+    if (spec.cahaya && spec.cahaya !== 'N/A') html += `<tr><td>Intensiti Kecerahan</td><td>${spec.cahaya}</td></tr>`;
+    html += '</table>';
+  }
+
+  outputDiv.innerHTML = html;
+}
+</script>
+
+</body>
+</html>
