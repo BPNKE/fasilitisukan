@@ -2,6 +2,7 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Spesifikasi Gelanggang dan Padang</title>
   <style>
     body {
@@ -16,9 +17,11 @@
       font-weight: bold;
     }
     select {
-      width: 300px;
-      padding: 5px;
+      width: 100%;
+      max-width: 300px;
+      padding: 8px;
       cursor: pointer;
+      font-size: 16px;
     }
     #output {
       margin-top: 20px;
@@ -30,11 +33,16 @@
       border-collapse: collapse;
       margin-top: 10px;
       width: 100%;
+      table-layout: fixed;
     }
     th, td {
       border: 1px solid #ccc;
       padding: 8px;
       text-align: left;
+      word-wrap: break-word;
+      max-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     th {
       background-color: #f0f0f0;
@@ -46,6 +54,26 @@
     .error {
       color: red;
     }
+    .retry-btn {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      cursor: pointer;
+      margin-top: 10px;
+      border-radius: 4px;
+    }
+    .retry-btn:hover {
+      background-color: #0056b3;
+    }
+    @media (max-width: 600px) {
+      select {
+        max-width: 100%;
+      }
+      th, td {
+        font-size: 14px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -53,16 +81,16 @@
 <h2>Spesifikasi Gelanggang & Padang</h2>
 
 <label for="sportSelect">Pilih Jenis Sukan:</label>
-<select id="sportSelect" title="Pilih jenis sukan" disabled>
+<select id="sportSelect" aria-label="Pilih jenis sukan" disabled>
   <option>Memuatkan senarai sukan...</option>
 </select>
 
 <label for="venueSelect" class="hidden" id="venueLabel">Pilih Lokasi / Tahap:</label>
-<select id="venueSelect" class="hidden" title="Pilih lokasi atau tahap">
+<select id="venueSelect" class="hidden" aria-label="Pilih lokasi atau tahap">
   <option value="">-- Sila Pilih --</option>
 </select>
 
-<div id="output"></div>
+<div id="output" aria-live="polite"></div>
 
 <script>
   const sportSelect = document.getElementById('sportSelect');
@@ -72,33 +100,44 @@
 
   let data = {};
 
-  // Muatkan data dari JSON
-  fetch('data-sukan.json')
-    .then(response => {
-      if (!response.ok) throw new Error('Ralat rangkaian');
-      return response.json();
-    })
-    .then(json => {
-      data = json;
-      populateSportOptions();
-    })
-    .catch(error => {
-      console.error('Ralat memuatkan data:', error);
-      outputDiv.innerHTML = '<p class="error">Gagal memuatkan data sukan. Sila cuba semula kemudian.</p>';
-      sportSelect.innerHTML = '<option>Gagal memuatkan data</option>';
-      sportSelect.disabled = true;
-    });
+  function fetchData() {
+    outputDiv.innerHTML = '<p class="loading">Memuatkan data...</p>';
+    fetch('data-sukan.json')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(response.status === 404 ? 'Fail data-sukan.json tidak ditemui' : 'Ralat rangkaian');
+        }
+        return response.json();
+      })
+      .then(json => {
+        data = json;
+        populateSportOptions();
+        outputDiv.innerHTML = '';
+      })
+      .catch(error => {
+        console.error('Ralat memuatkan data:', error);
+        outputDiv.innerHTML = `
+          <p class="error">${error.message || 'Gagal memuatkan data sukan. Sila cuba semula kemudian.'}</p>
+          <button class="retry-btn" aria-label="Cuba semula memuatkan data">Cuba Semula</button>
+        `;
+        sportSelect.innerHTML = '<option>Gagal memuatkan data</option>';
+        sportSelect.disabled = true;
+        const retryBtn = outputDiv.querySelector('.retry-btn');
+        retryBtn.addEventListener('click', fetchData);
+      });
+  }
 
   function populateSportOptions() {
     sportSelect.innerHTML = '<option value="">-- Sila Pilih --</option>';
     sportSelect.disabled = false;
 
-    for (let sport in data) {
+    const sports = Object.keys(data).sort(); // Sort for consistent display
+    sports.forEach(sport => {
       const option = document.createElement('option');
       option.value = sport;
       option.textContent = sport;
       sportSelect.appendChild(option);
-    }
+    });
   }
 
   sportSelect.addEventListener('change', updateVenueOptions);
@@ -115,7 +154,14 @@
       return;
     }
 
-    const venues = Object.keys(data[selectedSport]);
+    const venues = Object.keys(data[selectedSport] || {}).sort();
+    if (venues.length === 0) {
+      outputDiv.innerHTML = '<p class="error">Tiada lokasi tersedia untuk sukan ini.</p>';
+      venueSelect.classList.add('hidden');
+      venueLabel.classList.add('hidden');
+      return;
+    }
+
     venues.forEach(venue => {
       const option = document.createElement('option');
       option.value = venue;
@@ -131,27 +177,37 @@
     const sport = sportSelect.value;
     const venue = venueSelect.value;
 
-    if (!sport || !venue) return;
+    if (!sport || !venue || !data[sport] || !data[sport][venue]) {
+      outputDiv.innerHTML = '<p class="error">Data tidak sah untuk pilihan ini.</p>';
+      return;
+    }
 
     const spec = data[sport][venue];
     let html = '';
 
-    if (
-      (!spec.saiz || spec.saiz === 'N/A') &&
-      (!spec.permukaan || spec.permukaan === 'N/A') &&
-      (!spec.cahaya || spec.cahaya === 'N/A')
-    ) {
+    if (!spec || (!spec.saiz && !spec.permukaan && !spec.cahaya) || 
+        (spec.saiz === 'N/A' && spec.permukaan === 'N/A' && spec.cahaya === 'N/A')) {
       html = '<p class="loading">Tiada spesifikasi tersedia untuk pilihan ini.</p>';
     } else {
       html = '<h3>Spesifikasi</h3><table>';
-      if (spec.saiz && spec.saiz !== 'N/A') html += `<tr><td>Saiz</td><td>${spec.saiz}</td></tr>`;
-      if (spec.permukaan && spec.permukaan !== 'N/A') html += `<tr><td>Jenis Permukaan</td><td>${spec.permukaan}</td></tr>`;
-      if (spec.cahaya && spec.cahaya !== 'N/A') html += `<tr><td>Intensiti Kecerahan</td><td>${spec.cahaya}</td></tr>`;
+      html += '<tr><th>Kategori</th><th>Butiran</th></tr>';
+      if (spec.saiz && spec.saiz !== 'N/A') html += `<tr><td>Saiz</td><td>${sanitizeHTML(spec.saiz)}</td></tr>`;
+      if (spec.permukaan && spec.permukaan !== 'N/A') html += `<tr><td>Jenis Permukaan</td><td>${sanitizeHTML(spec.permukaan)}</td></tr>`;
+      if (spec.cahaya && spec.cahaya !== 'N/A') html += `<tr><td>Intensiti Kecerahan</td><td>${sanitizeHTML(spec.cahaya)}</td></tr>`;
       html += '</table>';
     }
 
     outputDiv.innerHTML = html;
   }
+
+  function sanitizeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // Initial fetch
+  fetchData();
 </script>
 
 </body>
